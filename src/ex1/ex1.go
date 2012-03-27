@@ -1,10 +1,10 @@
 package main
 
 import (
-	"fmt"
+	"os"
 	"vm2hack"
 )
 
 func main() {
-	fmt.Print(vm2hack.ConvertLine("push constant 17"))
+	vm2hack.ConvertFile(os.Args[1], os.Args[2])
 }
