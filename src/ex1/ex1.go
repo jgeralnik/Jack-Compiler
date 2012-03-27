@@ -1,9 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"vm2hack"
 )
 
 func main() {
-	vm2hack.Rain()
+	fmt.Print(vm2hack.ConvertLine("push constant 17"))
 }
