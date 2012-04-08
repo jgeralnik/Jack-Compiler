@@ -8,6 +8,16 @@ import (
 	"strings"
 )
 
+var (
+	label     int = 0
+	operators     = map[string]string{
+		"add": "+",
+		"sub": "-",
+		"and": "&",
+		"or":  "|",
+	}
+)
+
 func ConvertLine(line string) (result string) {
 	words := strings.Fields(line)
 	if len(words) == 0 || strings.HasPrefix(words[0], "//") {
@@ -17,8 +27,13 @@ func ConvertLine(line string) (result string) {
 	switch words[0] {
 	case "push":
 		result = push(words[1:])
-	case "add":
-		result = "@SP\nA=M-1\nD=M\n@SP\nM=M-1\nA=M-1\nM=D+M\n"
+	case "add", "sub", "and", "or":
+		result = fmt.Sprintf("@SP\nA=M-1\nD=M\n@SP\nM=M-1\nA=M-1\nM=M%sD\n", operators[words[0]])
+	case "eq", "gt", "lt":
+		result = fmt.Sprintf("@SP\nA=M-1\nD=M\n@SP\nM=M-1\nA=M-1\nD=M-D\n@LABEL%d\nD;J%s\n@SP\nA=M-1\nM=0\n@LABEL%d\n0;JMP\n(LABEL%d)\n@SP\nA=M-1\nM=-1\n(LABEL%d)\n", label, strings.ToUpper(words[0]), label+1, label, label+1)
+		label += 2
+	case "neg":
+		result = "@SP\nA=M-1\nM=-M\n"
 	default:
 		panic(fmt.Sprintf("Unknown1 command %s", words[0]))
 	}
