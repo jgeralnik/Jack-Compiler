@@ -64,6 +64,7 @@ func ConvertLine(line string, filename string) (result string) {
 			result += "M=0\nA=A+1\n"
 		}
 		result += "D=A\n@SP\nM=D\n"
+		function = words[1]
 	case "call":
 		result = fmt.Sprintf("@LABEL%d\nD=A\n@SP\nM=M+1\nA=M-1\nM=D\n", label) //Push return address
 		segments := []string{"LCL", "ARG", "THIS", "THAT"}
