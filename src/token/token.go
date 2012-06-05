@@ -70,21 +70,21 @@ func Read(path string) (tokens []Element, err error) {
 			}
 			return
 		}
-
-		for ; pos < len(line); pos++ {
+		for pos < len(line) {
 			start := pos
 			switch {
 			case line[pos] == '\t', line[pos] == ' ', line[pos] == '\n':
-				continue
+				pos++
 			case line[pos] == '/' && line[pos+1] == '/':
 				//comment until end of line
 				pos = len(line)
 			case line[pos] == '/' && line[pos+1] == '*':
 				pos += 2
-				for done := false; done; {
-					for ; pos < len(line); pos++ {
+				for done := false; !done; {
+					for ; pos < len(line)-1; pos++ {
 						if line[pos] == '*' && line[pos+1] == '/' {
 							done = true
+							pos += 2
 							break
 						}
 					}
@@ -97,12 +97,12 @@ func Read(path string) (tokens []Element, err error) {
 							}
 							return
 						}
+						pos = 0
 					}
 				}
 			case isLetter(line[start]):
 				for ; isLetter(line[pos]) || isDigit(line[pos]); pos++ {
 				}
-				pos--
 				flag := false
 
 				//Keyword
@@ -123,7 +123,6 @@ func Read(path string) (tokens []Element, err error) {
 				//IntegerConstant
 				for ; isDigit(line[pos]); pos++ {
 				}
-				pos--
 				tokens = append(tokens, Element{IntegerConstant, string(line[start:pos])})
 
 			//StringConstant
@@ -147,12 +146,16 @@ func Read(path string) (tokens []Element, err error) {
 			//Symbol
 			case line[pos] == '<':
 				tokens = append(tokens, Element{Symbol, "&lt;"})
+				pos++
 			case line[pos] == '>':
 				tokens = append(tokens, Element{Symbol, "&gt;"})
+				pos++
 			case line[pos] == '&':
 				tokens = append(tokens, Element{Symbol, "&amp;"})
+				pos++
 			default:
 				tokens = append(tokens, Element{Symbol, string(line[pos])})
+				pos++
 			}
 		}
 	}
