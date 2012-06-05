@@ -17,6 +17,7 @@ func CompileClass(tokens []token.Element, outputfile string) (err error) {
 	if err != nil {
 		return
 	}
+	defer output.Close()
 
 	output.WriteString("<class>\n")
 	defer output.WriteString("</class>\n")
