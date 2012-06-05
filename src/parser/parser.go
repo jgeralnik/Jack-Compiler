@@ -11,7 +11,6 @@ func CompileClass(tokens []token.Element, outputfile string) (err error) {
 	if tokens[pos].Tok != token.Keyword || tokens[pos].Value != "class" {
 		panic("Attempted to compile non-class element with CompileClass")
 	}
-	pos++
 
 	output, err := os.Create(outputfile)
 	if err != nil {
@@ -21,6 +20,9 @@ func CompileClass(tokens []token.Element, outputfile string) (err error) {
 
 	output.WriteString("<class>\n")
 	defer output.WriteString("</class>\n")
+
+  output.WriteString(tokens[pos].String() + "\n") //write class
+  pos++
 
 	for ; pos < len(tokens); pos++ {
 		switch tokens[pos].Tok {
@@ -38,6 +40,8 @@ func CompileClass(tokens []token.Element, outputfile string) (err error) {
 				if err != nil {
 					return err
 				}
+      default:
+        panic("Invalid keyword "+tokens[pos].Value+" in class")
 			}
 		}
 	}
@@ -81,6 +85,7 @@ func compileSubroutine(tokens []token.Element, start int, output *os.File) (pos 
 	defer output.WriteString("</subroutineBody>\n")
 
 	output.WriteString(tokens[pos].String() + "\n") //Write {
+  pos++
 
 	for ; tokens[pos].Value == "var"; pos++ {
 		pos, err = compileVarDec(tokens, pos, output)
@@ -179,6 +184,8 @@ func compileDo(tokens []token.Element, start int, output *os.File) (pos int, err
 
 	pos++
 	output.WriteString(tokens[pos].String() + "\n") //Write )
+	pos++
+	output.WriteString(tokens[pos].String() + "\n") //Write ;
 
 	return pos, nil
 }
@@ -245,10 +252,10 @@ func compileReturn(tokens []token.Element, start int, output *os.File) (pos int,
 		if err != nil {
 			return
 		}
+    pos++
 	}
-	pos++
 
-	output.WriteString(tokens[pos].String() + "\n") //Write;
+	output.WriteString(tokens[pos].String() + "\n") //Write ;
 	return
 }
 
@@ -288,7 +295,7 @@ func compileExpression(tokens []token.Element, start int, output *os.File) (pos 
 	output.WriteString("<expression>\n")
 	defer output.WriteString("</expression>\n")
 
-	pos, err = compileStatements(tokens, start, output)
+	pos, err = compileTerm(tokens, start, output)
 	if err != nil {
 		return
 	}
