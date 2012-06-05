@@ -76,6 +76,29 @@ func Read(path string) (tokens []Element, err error) {
 			switch {
 			case line[pos] == '\t', line[pos] == ' ', line[pos] == '\n':
 				continue
+			case line[pos] == '/' && line[pos+1] == '/':
+				//comment until end of line
+				pos = len(line)
+			case line[pos] == '/' && line[pos+1] == '*':
+				pos += 2
+				for done := false; done; {
+					for ; pos < len(line); pos++ {
+						if line[pos] == '*' && line[pos+1] == '/' {
+							done = true
+							break
+						}
+					}
+
+					if !done {
+						line, _, err = reader.ReadLine()
+						if err != nil {
+							if err == io.EOF {
+								panic("Unexpected end of file found. Expected */")
+							}
+							return
+						}
+					}
+				}
 			case isLetter(line[start]):
 				for ; isLetter(line[pos]) || isDigit(line[pos]); pos++ {
 				}
