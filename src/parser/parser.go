@@ -21,8 +21,8 @@ func CompileClass(tokens []token.Element, outputfile string) (err error) {
 	output.WriteString("<class>\n")
 	defer output.WriteString("</class>\n")
 
-  output.WriteString(tokens[pos].String() + "\n") //write class
-  pos++
+	output.WriteString(tokens[pos].String() + "\n") //write class
+	pos++
 
 	for ; pos < len(tokens); pos++ {
 		switch tokens[pos].Tok {
@@ -40,8 +40,8 @@ func CompileClass(tokens []token.Element, outputfile string) (err error) {
 				if err != nil {
 					return err
 				}
-      default:
-        panic("Invalid keyword "+tokens[pos].Value+" in class")
+			default:
+				panic("Invalid keyword " + tokens[pos].Value + " in class")
 			}
 		}
 	}
@@ -85,7 +85,7 @@ func compileSubroutine(tokens []token.Element, start int, output *os.File) (pos 
 	defer output.WriteString("</subroutineBody>\n")
 
 	output.WriteString(tokens[pos].String() + "\n") //Write {
-  pos++
+	pos++
 
 	for ; tokens[pos].Value == "var"; pos++ {
 		pos, err = compileVarDec(tokens, pos, output)
@@ -194,9 +194,24 @@ func compileLet(tokens []token.Element, start int, output *os.File) (pos int, er
 	output.WriteString("<letStatement>\n")
 	defer output.WriteString("</letStatement>\n")
 
-	for pos = start; tokens[pos-1].Value != "="; pos++ {
-		output.WriteString(tokens[pos].String() + "\n")
+	pos = start
+
+	output.WriteString(tokens[pos].String() + "\n") //Write let
+	pos++
+	output.WriteString(tokens[pos].String() + "\n") //Write varname
+	pos++
+
+	if tokens[pos].Value == "[" {
+		output.WriteString(tokens[pos].String() + "\n") //Write [
+		pos++
+		pos, err = compileExpression(tokens, pos, output)
+		pos++
+		output.WriteString(tokens[pos].String() + "\n") //Write ]
+		pos++
 	}
+
+	output.WriteString(tokens[pos].String() + "\n") //Write =
+	pos++
 
 	pos, err = compileExpression(tokens, pos, output)
 	if err != nil {
@@ -252,7 +267,7 @@ func compileReturn(tokens []token.Element, start int, output *os.File) (pos int,
 		if err != nil {
 			return
 		}
-    pos++
+		pos++
 	}
 
 	output.WriteString(tokens[pos].String() + "\n") //Write ;
@@ -290,8 +305,14 @@ func compileIf(tokens []token.Element, start int, output *os.File) (pos int, err
 	return
 }
 
+func isOp(tok token.Element) bool {
+	switch tok.Value {
+	case "+", "-", "*", "/", "&amp;", "|", "&lt;", "&gt;", "=":
+		return true
+	}
+	return false
+}
 func compileExpression(tokens []token.Element, start int, output *os.File) (pos int, err error) {
-	//til ; or extra ) (or ,?)
 	output.WriteString("<expression>\n")
 	defer output.WriteString("</expression>\n")
 
@@ -299,6 +320,17 @@ func compileExpression(tokens []token.Element, start int, output *os.File) (pos 
 	if err != nil {
 		return
 	}
+
+	for pos++; isOp(tokens[pos]); pos++ {
+		output.WriteString(tokens[pos].String() + "\n") //Write op
+		pos++
+		pos, err = compileTerm(tokens, pos, output)
+		if err != nil {
+			return
+		}
+	}
+
+	pos--
 
 	return
 }
@@ -308,7 +340,50 @@ func compileTerm(tokens []token.Element, start int, output *os.File) (pos int, e
 	defer output.WriteString("</term>\n")
 
 	pos = start
-	output.WriteString(tokens[pos].String() + "\n") //Write identifier 
+
+	switch tokens[pos].Tok {
+	case token.IntegerConstant, token.StringConstant, token.Keyword:
+		output.WriteString(tokens[pos].String() + "\n") //Write constant
+	case token.Symbol:
+		switch tokens[pos].Value {
+		case "-", "~":
+			output.WriteString(tokens[pos].String() + "\n") //Write unaryOp 
+			pos, err = compileTerm(tokens, pos+1, output)
+		case "(":
+			output.WriteString(tokens[pos].String() + "\n") //Write ( 
+			pos, err = compileExpression(tokens, pos+1, output)
+			pos++
+			output.WriteString(tokens[pos].String() + "\n") //Write ) 
+		}
+	case token.Identifier:
+		output.WriteString(tokens[pos].String() + "\n") //Write identifier
+		pos++
+		switch tokens[pos].Value {
+		case "(":
+			output.WriteString(tokens[pos].String() + "\n") //Write ( 
+			pos, err = compileExpressionList(tokens, pos+1, output)
+			pos++
+			output.WriteString(tokens[pos].String() + "\n") //Write ) 
+		case ".":
+			output.WriteString(tokens[pos].String() + "\n") //Write . 
+			pos++
+			output.WriteString(tokens[pos].String() + "\n") //Write identifier
+			pos++
+			output.WriteString(tokens[pos].String() + "\n") //Write ( 
+			pos, err = compileExpressionList(tokens, pos+1, output)
+			pos++
+			output.WriteString(tokens[pos].String() + "\n") //Write ) 
+		case "[":
+			output.WriteString(tokens[pos].String() + "\n") //Write [ 
+			pos, err = compileExpression(tokens, pos+1, output)
+			pos++
+			output.WriteString(tokens[pos].String() + "\n") //Write ] 
+		default:
+			pos--
+		}
+	default:
+		panic("Unknown token type found in compileTerm")
+	}
 
 	return
 }
@@ -318,13 +393,13 @@ func compileExpressionList(tokens []token.Element, start int, output *os.File) (
 	defer output.WriteString("</expressionList>\n")
 
 	for pos = start; tokens[pos].Value != ")"; pos++ {
-		pos, err = compileExpression(tokens, start, output)
+		pos, err = compileExpression(tokens, pos, output)
 		if err != nil {
 			return
 		}
-		pos++
 
-		if tokens[pos].Value != ")" {
+		if tokens[pos+1].Value != ")" {
+			pos++
 			if tokens[pos].Value != "," {
 				panic("Expected , in expressionList, got " + tokens[pos].Value)
 			}
