@@ -4,3 +4,4 @@ pkg
 bin
 src/test
 src/ex1/ex1
+src/scanner/scanner
