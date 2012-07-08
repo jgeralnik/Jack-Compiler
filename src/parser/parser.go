@@ -3,6 +3,7 @@ package parser
 import (
 	"fmt"
 	"os"
+	"strings"
 	"token"
 )
 
@@ -29,12 +30,12 @@ func CompileClass(tokens []token.Element, outputfile string) (err error) {
 	//defer output.WriteString("</class>\n")
 
 	//output.WriteString(tokens[pos].String() + "\n") //Write 'class'
-  pos++
+	pos++
 	//output.WriteString(tokens[pos].String() + "\n") //Write class name
 	className = tokens[pos].Value
 	pos++
 	//output.WriteString(tokens[pos].String() + "\n") //Write {
-  pos++
+	pos++
 
 	for ; pos < len(tokens)-1; pos++ { //Last token is }
 		switch tokens[pos].Tok {
@@ -53,8 +54,8 @@ func CompileClass(tokens []token.Element, outputfile string) (err error) {
 			default:
 				panic("Invalid keyword " + tokens[pos].Value + " in class")
 			}
-    case token.Identifier, token.IntegerConstant, token.StringConstant, token.Symbol:
-      panic("Loose symbol " + tokens[pos].Value + " in class")
+		case token.Identifier, token.IntegerConstant, token.StringConstant, token.Symbol:
+			panic("Loose symbol " + tokens[pos].Value + " in class")
 		}
 	}
 
@@ -120,7 +121,7 @@ func compileSubroutine(tokens []token.Element, start int, output *os.File) (pos 
 	}
 
 	pos++
-	output.WriteString(tokens[pos].String() + "\n") //Write }
+	//output.WriteString(tokens[pos].String() + "\n") //Write }
 
 	return
 }
@@ -195,28 +196,36 @@ func compileVarDec(tokens []token.Element, start int, output *os.File) (pos int,
 func compileDo(tokens []token.Element, start int, output *os.File) (pos int, err error) {
 	//output.WriteString("<doStatement>\n")
 	//defer output.WriteString("</doStatement>\n")
+	var funcname string
+	pos = start
+	//output.WriteString(tokens[pos].String() + "\n") //Write do
+	pos++
+	//output.WriteString(tokens[pos].String() + "\n") //Write object
+	if isUpper(tokens[pos].Value) {
+		//static object
+		funcname = tokens[pos].Value + "." + tokens[pos+2].Value
+		pos++
+		//output.WriteString(tokens[pos].String() + "\n") //Write .
+		pos++
+		//output.WriteString(tokens[pos].String() + "\n") //Write function name
+		pos++
+	} else {
+		fmt.Print(tokens[pos].Value)
+		panic("Can't yet compile object functions!")
+	}
+	//output.WriteString(tokens[pos].String() + "\n") //Write (
+	pos++
 
-  pos = start
-  output.WriteString(tokens[pos].String() + "\n") //Write do
-  pos++
-  output.WriteString(tokens[pos].String() + "\n") //Write object
-  pos++
-  output.WriteString(tokens[pos].String() + "\n") //Write .
-  pos++
-  output.WriteString(tokens[pos].String() + "\n") //Write function name
-  pos++
-  output.WriteString(tokens[pos].String() + "\n") //Write (
-  pos++
-
-	pos, err = compileExpressionList(tokens, pos, output)
+	pos, count, err := compileExpressionList(tokens, pos, output)
 	if err != nil {
 		return
 	}
 
 	pos++
-	output.WriteString(tokens[pos].String() + "\n") //Write )
+	output.WriteString(fmt.Sprintf("call %s %d\n", funcname, count))
+	//output.WriteString(tokens[pos].String() + "\n") //Write )
 	pos++
-	output.WriteString(tokens[pos].String() + "\n") //Write ;
+	//output.WriteString(tokens[pos].String() + "\n") //Write ;
 
 	return pos, nil
 }
@@ -286,11 +295,11 @@ func compileWhile(tokens []token.Element, start int, output *os.File) (pos int, 
 }
 
 func compileReturn(tokens []token.Element, start int, output *os.File) (pos int, err error) {
-	output.WriteString("<returnStatement>\n")
-	defer output.WriteString("</returnStatement>\n")
+	//output.WriteString("<returnStatement>\n")
+	//defer output.WriteString("</returnStatement>\n")
 
 	pos = start
-	output.WriteString(tokens[pos].String() + "\n") //Write return
+	//output.WriteString(tokens[pos].String() + "\n") //Write return
 	pos++
 
 	if tokens[pos].Value != ";" {
@@ -301,7 +310,7 @@ func compileReturn(tokens []token.Element, start int, output *os.File) (pos int,
 		pos++
 	}
 
-	output.WriteString(tokens[pos].String() + "\n") //Write ;
+	//output.WriteString(tokens[pos].String() + "\n") //Write ;
 	return
 }
 
@@ -344,8 +353,8 @@ func isOp(tok token.Element) bool {
 	return false
 }
 func compileExpression(tokens []token.Element, start int, output *os.File) (pos int, err error) {
-	output.WriteString("<expression>\n")
-	defer output.WriteString("</expression>\n")
+	//output.WriteString("<expression>\n")
+	//defer output.WriteString("</expression>\n")
 
 	pos, err = compileTerm(tokens, start, output)
 	if err != nil {
@@ -353,38 +362,63 @@ func compileExpression(tokens []token.Element, start int, output *os.File) (pos 
 	}
 
 	for pos++; isOp(tokens[pos]); pos++ {
-		output.WriteString(tokens[pos].String() + "\n") //Write op
+		//output.WriteString(tokens[pos].String() + "\n") //Write op
+		op := tokens[pos].Value
 		pos++
 		pos, err = compileTerm(tokens, pos, output)
+		var ops = map[string]string{
+			"+":    "add",
+			"-":    "sub",
+			"*":    "call Math.Multiply 2",
+			"/":    "call Math.Divide 2",
+			"&amp": "and",
+			"|":    "or",
+			"&lt":  "lt",
+			"&gt":  "gt",
+			"=":    "eq",
+		}
+
+		if _, ok := ops[op]; !ok {
+			panic("Illegal operator " + tokens[pos-1].Value)
+		}
+
+		output.WriteString(ops[op])
+		output.WriteString("\n")
+
 		if err != nil {
 			return
 		}
 	}
 
 	pos--
-
 	return
 }
 
 func compileTerm(tokens []token.Element, start int, output *os.File) (pos int, err error) {
-	output.WriteString("<term>\n")
-	defer output.WriteString("</term>\n")
+	//output.WriteString("<term>\n")
+	//defer output.WriteString("</term>\n")
 
 	pos = start
 
 	switch tokens[pos].Tok {
-	case token.IntegerConstant, token.StringConstant, token.Keyword:
-		output.WriteString(tokens[pos].String() + "\n") //Write constant
+	case token.IntegerConstant:
+		//output.WriteString(tokens[pos].String() + "\n") //Write constant
+		output.WriteString(fmt.Sprintf("push constant %s\n", tokens[pos].Value))
+	case token.StringConstant, token.Keyword:
+		panic("I don't know what to do with " + tokens[pos].Value)
 	case token.Symbol:
 		switch tokens[pos].Value {
-		case "-", "~":
-			output.WriteString(tokens[pos].String() + "\n") //Write unaryOp 
+		case "-":
 			pos, err = compileTerm(tokens, pos+1, output)
+			output.WriteString("neg\n")
+		case "~":
+			pos, err = compileTerm(tokens, pos+1, output)
+			output.WriteString("not\n")
 		case "(":
-			output.WriteString(tokens[pos].String() + "\n") //Write ( 
+			//output.WriteString(tokens[pos].String() + "\n") //Write ( 
 			pos, err = compileExpression(tokens, pos+1, output)
 			pos++
-			output.WriteString(tokens[pos].String() + "\n") //Write ) 
+			//output.WriteString(tokens[pos].String() + "\n") //Write ) 
 		}
 	case token.Identifier:
 		output.WriteString(tokens[pos].String() + "\n") //Write identifier
@@ -392,7 +426,7 @@ func compileTerm(tokens []token.Element, start int, output *os.File) (pos int, e
 		switch tokens[pos].Value {
 		case "(":
 			output.WriteString(tokens[pos].String() + "\n") //Write ( 
-			pos, err = compileExpressionList(tokens, pos+1, output)
+			pos, _, err = compileExpressionList(tokens, pos+1, output)
 			pos++
 			output.WriteString(tokens[pos].String() + "\n") //Write ) 
 		case ".":
@@ -401,7 +435,7 @@ func compileTerm(tokens []token.Element, start int, output *os.File) (pos int, e
 			output.WriteString(tokens[pos].String() + "\n") //Write identifier
 			pos++
 			output.WriteString(tokens[pos].String() + "\n") //Write ( 
-			pos, err = compileExpressionList(tokens, pos+1, output)
+			pos, _, err = compileExpressionList(tokens, pos+1, output)
 			pos++
 			output.WriteString(tokens[pos].String() + "\n") //Write ) 
 		case "[":
@@ -419,12 +453,13 @@ func compileTerm(tokens []token.Element, start int, output *os.File) (pos int, e
 	return
 }
 
-func compileExpressionList(tokens []token.Element, start int, output *os.File) (pos int, err error) {
-	output.WriteString("<expressionList>\n")
-	defer output.WriteString("</expressionList>\n")
-
+func compileExpressionList(tokens []token.Element, start int, output *os.File) (pos int, count int, err error) {
+	//output.WriteString("<expressionList>\n")
+	//defer output.WriteString("</expressionList>\n")
+	count = 0
 	for pos = start; tokens[pos].Value != ")"; pos++ {
 		pos, err = compileExpression(tokens, pos, output)
+		count++
 		if err != nil {
 			return
 		}
@@ -440,4 +475,8 @@ func compileExpressionList(tokens []token.Element, start int, output *os.File) (
 	pos--
 
 	return
+}
+
+func isUpper(word string) bool {
+	return word[0] == strings.ToUpper(word)[0]
 }
