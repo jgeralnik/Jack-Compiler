@@ -21,7 +21,7 @@ func main() {
 		} else {
 			dir, file := filepath.Split(os.Args[1])
 			base := file[:len(file)-len(filepath.Ext(file))]
-			parser.CompileClass(tokens, filepath.Join(dir, base+".xml"))
+			parser.CompileClass(tokens, filepath.Join(dir, base+".vm"))
 		}
 	}
 }
@@ -35,7 +35,7 @@ func walk(inputfile string, info os.FileInfo, err error) error {
 		tokens, _ := token.Read(inputfile)
 		dir, file := filepath.Split(inputfile)
 		base := file[:len(file)-len(filepath.Ext(file))]
-		parser.CompileClass(tokens, filepath.Join(dir, base+".xml"))
+		parser.CompileClass(tokens, filepath.Join(dir, base+".vm"))
 	}
 	return nil
 }
