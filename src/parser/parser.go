@@ -8,9 +8,10 @@ import (
 )
 
 var (
-	//static []string
+	static    []variable
 	argument  []variable
 	local     []variable
+	field     []variable
 	className string
 	label     int = 0
 )
@@ -40,18 +41,23 @@ func CompileClass(tokens []token.Element, outputfile string) (err error) {
 	//output.WriteString(tokens[pos].String() + "\n") //Write class name
 	className = tokens[pos].Value
 	pos++
+
+	static = make([]variable, 0)
+	field = make([]variable, 0)
 	//output.WriteString(tokens[pos].String() + "\n") //Write {
 	pos++
+
+	for ; tokens[pos].Value == "static" || tokens[pos].Value == "field"; pos++ {
+		pos, err = compileClassVarDec(tokens, pos, output)
+		if err != nil {
+			return
+		}
+	}
 
 	for ; pos < len(tokens)-1; pos++ { //Last token is }
 		switch tokens[pos].Tok {
 		case token.Keyword:
 			switch tokens[pos].Value {
-			case "static", "field":
-				pos, err = compileClassVarDec(tokens, pos, output)
-				if err != nil {
-					return
-				}
 			case "constructor", "method", "function":
 				pos, err = compileSubroutine(tokens, pos, output)
 				if err != nil {
@@ -72,13 +78,23 @@ func CompileClass(tokens []token.Element, outputfile string) (err error) {
 //pointer to own last item
 
 func compileClassVarDec(tokens []token.Element, start int, output *os.File) (pos int, err error) {
-	output.WriteString("<classVarDec>\n")
-	defer output.WriteString("</classVarDec>\n")
+	//output.WriteString("<classVarDec>\n")
+	//defer output.WriteString("</classVarDec>\n")
 
-	for pos = start; tokens[pos].Value != ";"; pos++ {
-		output.WriteString(tokens[pos].String() + "\n")
+	pos = start
+
+	seg := tokens[pos].Value
+	pos++ //skip over var
+	vartype := tokens[pos].Value
+
+	for ; tokens[pos].Value != ";"; pos++ {
+		pos++ //skip over vartype or comma
+		if seg == "field" {
+			field = append(field, variable{vartype, tokens[pos].Value})
+		} else {
+			static = append(static, variable{vartype, tokens[pos].Value})
+		}
 	}
-	output.WriteString(tokens[pos].String() + "\n")
 
 	return pos, nil
 }
@@ -91,6 +107,7 @@ func compileSubroutine(tokens []token.Element, start int, output *os.File) (pos 
 
 	pos = start
 	//output.WriteString(tokens[pos].String() + "\n") //Write function/constructor/method
+	var subroutineType = tokens[pos].Value
 	pos++
 	//output.WriteString(tokens[pos].String() + "\n") //Write return value
 	pos++
@@ -122,6 +139,19 @@ func compileSubroutine(tokens []token.Element, start int, output *os.File) (pos 
 		}
 	}
 	output.WriteString(fmt.Sprintf("%d\n", len(local)))
+
+	switch subroutineType {
+	case "constructor":
+		output.WriteString(fmt.Sprintf("push constant %d\n", len(field)))
+		output.WriteString("call Memory.alloc 1\n")
+		output.WriteString("pop pointer 0\n")
+	case "method":
+		argument = append([]variable{variable{className, "this"}}, argument...)
+		output.WriteString("push argument 0\npop pointer 0\n") //update this
+	case "function":
+	default:
+		panic("What am I?")
+	}
 
 	pos, err = compileStatements(tokens, pos, output)
 	if err != nil {
@@ -218,18 +248,34 @@ func compileDo(tokens []token.Element, start int, output *os.File) (pos int, err
 	//output.WriteString(tokens[pos].String() + "\n") //Write do
 	pos++
 	//output.WriteString(tokens[pos].String() + "\n") //Write object
+	var method = true
 	if isUpper(tokens[pos].Value) {
-		//static object
-		funcname = tokens[pos].Value + "." + tokens[pos+2].Value
+		method = false
+		//class function
+		funcname = tokens[pos].Value
 		pos++
 		//output.WriteString(tokens[pos].String() + "\n") //Write .
 		pos++
 		//output.WriteString(tokens[pos].String() + "\n") //Write function name
-		pos++
+		funcname += "." + tokens[pos].Value
 	} else {
-		fmt.Print(tokens[pos].Value)
-		panic("Can't yet compile object functions!")
+		if tokens[pos+1].Value == "(" {
+			//method call on this
+			output.WriteString("push pointer 0\n") //push this
+			funcname = className + "." + tokens[pos].Value
+		} else {
+			//method call on other object
+			segment, index, myvar := getVariable(tokens[pos].Value)
+			funcname = myvar.vartype
+			output.WriteString(fmt.Sprintf("push %s %d\n", segment, index)) //push this
+			pos++
+			//output.WriteString(tokens[pos].String() + "\n") //Write .
+			pos++
+			//output.WriteString(tokens[pos].String() + "\n") //Write function name
+			funcname += "." + tokens[pos].Value
+		}
 	}
+	pos++
 	//output.WriteString(tokens[pos].String() + "\n") //Write (
 	pos++
 
@@ -238,6 +284,9 @@ func compileDo(tokens []token.Element, start int, output *os.File) (pos int, err
 		return
 	}
 
+	if method {
+		count++
+	}
 	pos++
 	output.WriteString(fmt.Sprintf("call %s %d\n", funcname, count))
 	output.WriteString("pop temp 0\n")
@@ -257,42 +306,18 @@ func compileLet(tokens []token.Element, start int, output *os.File) (pos int, er
 	//output.WriteString(tokens[pos].String() + "\n") //Write let
 	pos++
 	//output.WriteString(tokens[pos].String() + "\n") //Write varname
-	myvar := ""
-	for index, item := range local {
-		if item.name == tokens[pos].Value {
-			myvar = fmt.Sprintf("local %d", index)
-		}
-	}
-	if myvar == "" {
-		for index, item := range argument {
-			if item.name == tokens[pos].Value {
-				myvar = fmt.Sprintf("argument %d", index)
-			}
-		}
-	}
-
-	if myvar == "" {
-		e := "Can't find variable " + tokens[pos].Value + "\n"
-		e += "Local is:\n"
-		for _, item := range local {
-			e += fmt.Sprintf("%s\n", item)
-		}
-		e += "Argument is:\n"
-		for _, item := range argument {
-			e += fmt.Sprintf("%s\n", item)
-		}
-		panic(e)
-	}
-
+	myvar := getSegment(tokens[pos].Value)
 	pos++
 
 	if tokens[pos].Value == "[" {
-		panic("Arrays not yet supported in let statement!")
-		output.WriteString(tokens[pos].String() + "\n") //Write [
+		//output.WriteString(tokens[pos].String() + "\n") //Write [
 		pos++
 		pos, err = compileExpression(tokens, pos, output)
 		pos++
-		output.WriteString(tokens[pos].String() + "\n") //Write ]
+		//output.WriteString(tokens[pos].String() + "\n") //Write ]
+		output.WriteString(fmt.Sprintf("push %s\nadd\n", myvar))
+		output.WriteString("pop pointer 1\n")
+		myvar = "that 0"
 		pos++
 	}
 
@@ -495,13 +520,20 @@ func compileTerm(tokens []token.Element, start int, output *os.File) (pos int, e
 		switch tokens[pos].Value {
 		case "true":
 			output.WriteString("push constant 0\nnot\n")
-		case "false":
+		case "false", "null":
 			output.WriteString("push constant 0\n")
+		case "this":
+			output.WriteString("push pointer 0\n")
 		default:
-			panic("Invalid keyword " + tokens[pos].Value + "in terminal")
+			panic("Invalid keyword " + tokens[pos].Value + " in terminal")
 		}
 	case token.StringConstant:
-		panic("I don't know what to do with " + tokens[pos].Value)
+		output.WriteString(fmt.Sprintf("push constant %d\n", len(tokens[pos].Value)))
+		output.WriteString("call String.new 1\n")
+		for _, value := range tokens[pos].Value {
+			output.WriteString(fmt.Sprintf("push constant %d\n", value))
+			output.WriteString("call String.appendChar 2\n")
+		}
 	case token.Symbol:
 		switch tokens[pos].Value {
 		case "-":
@@ -528,56 +560,53 @@ func compileTerm(tokens []token.Element, start int, output *os.File) (pos int, e
 			pos++
 			output.WriteString(tokens[pos].String() + "\n") //Write ) 
 		case ".":
-			//Previous item was classname
-			funcname := tokens[pos-1].Value
-			//output.WriteString(tokens[pos].String() + "\n") //Write . 
-			pos++
-			//output.WriteString(tokens[pos].String() + "\n") //Write identifier
-			funcname += "." + tokens[pos].Value
+			var funcname string
+			var method bool
+			if isUpper(tokens[pos-1].Value) {
+				//class function
+				method = false
+				funcname = tokens[pos-1].Value
+				pos++
+				funcname += "." + tokens[pos].Value
+			} else {
+				//method call on other object
+				method = true
+				segment, index, myvar := getVariable(tokens[pos-1].Value)
+				funcname = myvar.vartype
+				output.WriteString(fmt.Sprintf("push %s %d\n", segment, index)) //push this
+				pos++
+				funcname += "." + tokens[pos].Value
+			}
 			pos++
 			//output.WriteString(tokens[pos].String() + "\n") //Write ( 
 
 			var count int
 			pos, count, err = compileExpressionList(tokens, pos+1, output)
 
+			if method {
+				count++
+			}
+
 			pos++
 			output.WriteString(fmt.Sprintf("call %s %d\n", funcname, count))
 			//output.WriteString(tokens[pos].String() + "\n") //Write ) 
 
 		case "[":
-			panic("Not implemented")
-			output.WriteString(tokens[pos].String() + "\n") //Write [ 
+			myvar := getSegment(tokens[pos-1].Value)
+			output.WriteString("push pointer 1\n") //Save place so screwy things don't happen
+			//output.WriteString(tokens[pos].String() + "\n") //Write [ 
 			pos, err = compileExpression(tokens, pos+1, output)
 			pos++
-			output.WriteString(tokens[pos].String() + "\n") //Write ] 
+			//output.WriteString(tokens[pos].String() + "\n") //Write ] 
+			output.WriteString(fmt.Sprintf("push %s\nadd\n", myvar))
+			output.WriteString("pop pointer 1\n")
+			output.WriteString("push that 0\n")
+			output.WriteString("pop temp 0\n")
+			output.WriteString("pop pointer 1\n")
+			output.WriteString("push temp 0\n")
 		default:
 			pos--
-			myvar := ""
-			for index, item := range local {
-				if item.name == tokens[pos].Value {
-					myvar = fmt.Sprintf("local %d", index)
-				}
-			}
-			if myvar == "" {
-				for index, item := range argument {
-					if item.name == tokens[pos].Value {
-						myvar = fmt.Sprintf("argument %d", index)
-					}
-				}
-			}
-
-			if myvar == "" {
-				e := "Can't find variable " + tokens[pos].Value + "\n"
-				e += "Local is:\n"
-				for _, item := range local {
-					e += fmt.Sprintf("%s\n", item)
-				}
-				e += "Argument is:\n"
-				for _, item := range argument {
-					e += fmt.Sprintf("%s\n", item)
-				}
-				panic(e)
-			}
+			myvar := getSegment(tokens[pos].Value)
 			output.WriteString("push " + myvar + "\n")
 		}
 	default:
@@ -613,4 +642,44 @@ func compileExpressionList(tokens []token.Element, start int, output *os.File) (
 
 func isUpper(word string) bool {
 	return word[0] == strings.ToUpper(word)[0]
+}
+
+func getSegment(varname string) string {
+	segment, index, _ := getVariable(varname)
+	return fmt.Sprintf("%s %d", segment, index)
+}
+
+func getVariable(varname string) (segment string, index int, item variable) {
+	if varname == "this" {
+		return "pointer", 0, variable{}
+	}
+
+	for index, item = range local {
+		if item.name == varname {
+			return "local", index, item
+		}
+	}
+
+	for index, item = range argument {
+		if item.name == varname {
+			return "argument", index, item
+		}
+	}
+
+	for index, item = range field {
+		if item.name == varname {
+			return "this", index, item
+		}
+	}
+
+	for index, item = range static {
+		if item.name == varname {
+			return "static", index, item
+		}
+	}
+
+	e := fmt.Sprintf("Can't find variable %s\nLocal is: %s\nArgument is %s\nThis is: %s\nStatic is: %s\n", varname, local, argument, field, static)
+	panic(e)
+
+	return
 }

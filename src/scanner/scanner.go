@@ -28,6 +28,9 @@ func main() {
 
 func walk(inputfile string, info os.FileInfo, err error) error {
 	if info.IsDir() {
+		if inputfile != os.Args[1] {
+			return filepath.SkipDir
+		}
 		return nil
 	}
 
